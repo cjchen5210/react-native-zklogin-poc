@@ -1,8 +1,8 @@
 import 'fast-text-encoding';
 import 'react-native-url-polyfill/auto';
 import './sui/env';
-import React, {useState, useCallback, useMemo, useEffect} from 'react';
-import {Alert} from 'react-native';
+import React, { useState, useCallback, useMemo, useEffect } from 'react';
+import { Alert } from 'react-native';
 import {
     authorize,
     refresh,
@@ -29,26 +29,14 @@ import {
     getZNPFromEnoki,
     getSaltFromEnoki,
 } from "./sui/zkLogin";
-import {useSui} from "./sui/hooks/useSui";
+import { useSui } from "./sui/hooks/useSui";
 import jwt_decode from "jwt-decode";
-import {generateNonce, generateRandomness, genAddressSeed, getZkLoginSignature, jwtToAddress} from '@mysten/zklogin';
-
-const configs = {
-    auth0: {
-        issuer: 'https://accounts.google.com',
-        clientId: '70599191792-e7cuqm6pldc8ffp3hg9ie84n4d8u0stm.apps.googleusercontent.com',
-        redirectUrl: 'com.googleusercontent.apps.70599191792-e7cuqm6pldc8ffp3hg9ie84n4d8u0stm:/oauth2redirect/google',
-        scopes: ['openid'],
-        response_type: 'id_token',
-    },
-    auth1: {
-        issuer: 'https://accounts.google.com',
-        clientId: '595966210064-3nnnqvmaelqnqsmq448kv05po362smt2.apps.googleusercontent.com',
-        redirectUrl: 'https://poc-zklogin.vercel.app/proxy?redirect_uri=com.googleusercontent.apps.70599191792-e7cuqm6pldc8ffp3hg9ie84n4d8u0stm:/oauth2redirect/google',
-        scopes: ['openid'],
-        response_type: 'id_token',
-    }
-};
+import { generateNonce, generateRandomness, genAddressSeed, getZkLoginSignature, jwtToAddress } from '@mysten/zklogin';
+import * as WebBrowser from 'expo-web-browser';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Google from 'expo-auth-session/providers/google';
+import { Ed25519Keypair } from '@mysten/sui.js/keypairs/ed25519'
+import * as AuthSession from 'expo-auth-session';
 
 const defaultAuthState = {
     hasLoggedInOnce: false,
@@ -58,20 +46,74 @@ const defaultAuthState = {
     refreshToken: '',
 };
 
+WebBrowser.maybeCompleteAuthSession();
+
 const App = () => {
     const [authState, setAuthState] = useState(defaultAuthState);
-    const {suiClient} = useSui();
+    const { suiClient } = useSui();
     const [suiVars, setSuiVars] = useState();
-    // const [enokiFlow, setEnokiFlow] = useState();
-    // useEffect(() => {
-    //     setEnokiFlow(new EnokiFlow({
-    //         apiKey: "enoki_apikey_3662ad8b95e837bc26cf41dee4900d37",
-    //     }));
-    // }, []);
+    const [storeSuiConst, setStoreSuiConst] = useState();
+
+    const [request, response, promptAsync] = Google.useIdTokenAuthRequest({
+        androidClientId: '224270927962-v7v15cvf59d97vuj96km0hertd39ri1g.apps.googleusercontent.com',
+        iosClientId: '224270927962-pvl22s7ep33brf5pfmdlqcrgr9kf62je.apps.googleusercontent.com',
+        webClientId: '224270927962-p5fasuku6k9p7i9q8o7phdsf7rm41r38.apps.googleusercontent.com',
+    });
+
+    const zklogin = async () => {
+        const suiConst = await prepareLogin(suiClient);
+        setStoreSuiConst(() => suiConst);        
+        window.localStorage.setItem('sui const', JSON.stringify(suiConst));
+        console.log('nonce is', suiConst.nonce);        
+        const params = new URLSearchParams({
+            client_id: '224270927962-p5fasuku6k9p7i9q8o7phdsf7rm41r38.apps.googleusercontent.com',
+            redirect_uri: 'http://localhost:19006',
+            response_type: "id_token",
+            scope: "openid",
+            nonce: suiConst.nonce,
+        });
+        const loginURL = `https://accounts.google.com/o/oauth2/v2/auth?${params}`;
+        window.location.replace(loginURL);
+    }
+
+    const getZKP = useCallback(async (jwt) => {
+        try {
+            const decodeJwt = jwt_decode(jwt);
+            console.log('decode', decodeJwt);
+            const iToken = decodeJwt.jti;
+            console.log('id token', iToken);
+            const address = jwtToAddress(jwt, BigInt(0));
+            console.log('address is ', address);
+            const suiconst = window.localStorage.getItem('sui const');
+            console.log('local storage sui const', JSON.parse(suiconst));
+            const zkp = await getZNPFromMystenAPI(jwt, '0', JSON.parse(suiconst));
+            console.log('zkp', zkp);
+        } catch (error) {
+
+        } finally {
+            window.localStorage.removeItem('sui const');
+        }
+
+    }, [storeSuiConst])
+
+    useEffect(() => {
+        if (response) {
+            // console.log('request is ', request);
+            console.log('response is ', response);
+        }
+    }, [response]);
+
+    useEffect(() => {
+        const curUrl = window.location.href;
+        const jwt = curUrl.split('id_token=')[1];
+        if (jwt) {
+            getZKP(jwt);
+        }
+
+    }, [])
 
     const handleAuthorize = useCallback(async provider => {
         try {
-
             const suiConst = await prepareLogin(suiClient);
 
             setSuiVars(suiConst);
@@ -90,7 +132,7 @@ const App = () => {
             // const registerResult = await register(registerConfig);
 
             const config = {
-                ...(configs[provider]),
+                ...testConfig,
                 useNonce: false,
                 additionalParameters: {
                     nonce: suiConst.nonce,
@@ -99,9 +141,11 @@ const App = () => {
                 iosPrefersEphemeralSession: true,
                 prefersEphemeralWebBrowserSession: true,
             };
-
+            console.log('config is ', config);
+            // debugger;
             const newAuthState = await authorize(config);
-
+            // const newAuthState = response;
+            console.log('response is ', newAuthState)
             setAuthState({
                 hasLoggedInOnce: true,
                 provider: provider,
@@ -112,30 +156,30 @@ const App = () => {
             console.log('From SUI const :', suiConst);
 
 
-            const decodedJwt = jwt_decode(newAuthState.idToken);
-            console.log('Google auth response.nonce :', decodedJwt.nonce);
+            // const decodedJwt = jwt_decode(newAuthState.idToken);
+            // console.log('Google auth response.nonce :', decodedJwt.nonce);
 
-            if (decodedJwt.nonce !== suiConst.nonce) {
-                Alert.alert('Missatching Google nonce! Your auth try was probably spoofed');
-                return;
-            }
+            // if (decodedJwt.nonce !== suiConst.nonce) {
+            //     Alert.alert('Missatching Google nonce! Your auth try was probably spoofed');
+            //     return;
+            // }
 
-            console.log("Google JWT response:", newAuthState.idToken);
+            // console.log("Google JWT response:", newAuthState.idToken);
 
             // zkLogin Flow
-            const salt = await getSaltFromMystenAPI(newAuthState.idToken);
-            // setSuiVars(...suiVars, salt);
-            console.log("Salt:", salt);
+            // const salt = await getSaltFromMystenAPI(newAuthState.idToken);
+            // // setSuiVars(...suiVars, salt);
+            // console.log("Salt:", salt);
 
-            const zkp = await getZNPFromMystenAPI(newAuthState.idToken, salt, suiConst);
-            // setSuiVars(...suiVars, zkp);
-            const address = jwtToAddress(newAuthState.idToken, BigInt(salt));
-            console.log("ZKP:", zkp, 'my Address:', address);
+            // const zkp = await getZNPFromMystenAPI(newAuthState.idToken, salt, suiConst);
+            // // setSuiVars(...suiVars, zkp);
+            // const address = jwtToAddress(newAuthState.idToken, BigInt(salt));
+            // console.log("ZKP:", zkp, 'my Address:', address);
 
 
-            // Execute sample transaction
-            const transactionData = executeTransactionWithZKP(newAuthState.idToken, zkp, suiConst, salt, suiClient);
-            console.log("Transaction finished:", transactionData);
+            // // Execute sample transaction
+            // const transactionData = executeTransactionWithZKP(newAuthState.idToken, zkp, suiConst, salt, suiClient);
+            // console.log("Transaction finished:", transactionData);
 
         } catch (error) {
             Alert.alert('Failed to log in', error.message);
@@ -344,23 +388,23 @@ const App = () => {
             <ButtonContainer>
                 {!authState.accessToken ? (
                     <>
-                        <Button
+                        {/* <Button
                           onPress={() => handleAuthorize2('auth0')}
                           text="zkLogin with Enoki"
                           color="#DA2536"
-                        />
+                        /> */}
                         <Button
-                            onPress={() => handleAuthorize('auth0')}
+                            onPress={zklogin}
                             text="zkLogin deprecated flow"
                             color="#DA2536"
                         />
                     </>
                 ) : null}
                 {authState.refreshToken ? (
-                    <Button onPress={() => handleRefresh('auth0')} text="Refresh" color="#24C2CB"/>
+                    <Button onPress={() => handleRefresh('auth0')} text="Refresh" color="#24C2CB" />
                 ) : null}
                 {showRevoke ? (
-                    <Button onPress={handleRevoke} text="Revoke" color="#EF525B"/>
+                    <Button onPress={handleRevoke} text="Revoke" color="#EF525B" />
                 ) : null}
             </ButtonContainer>
         </Page>

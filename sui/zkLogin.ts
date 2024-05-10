@@ -69,8 +69,9 @@ export async function getSaltFromMystenAPI(jwtEncoded: string) {
     // const decodedJwt: LoginResponse = jwt_decode(jwtEncoded) as LoginResponse;
     // console.log("decodedJwt:", decodedJwt);
 
-    const payload = { token: jwtEncoded };
-
+    const payload = {
+        token: jwtEncoded,
+    };
     // console.log("Getting salt:", payload, "decoded:", decodedJwt);
     const res = await axios.post(url, payload);
     return res.data.salt;
@@ -126,7 +127,7 @@ export async function getZNPFromMystenAPI(jwtToken: string, salt: string, userKe
     //     zkpPayload,
     //     forceUpdate
     // }
-
+    console.log('zklogin proof post para', url, zkpPayload);
     const proofResponse = await axios.post(url, zkpPayload)
 
     if (!proofResponse?.data) {
