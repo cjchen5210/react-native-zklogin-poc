@@ -11,11 +11,10 @@
   "dependencies": {
     "@craftzdog/react-native-buffer": "^6.0.5",
     "@expo/webpack-config": "^19.0.0",
-    "@mysten/enoki": "^0.0.8",
+    "@mysten/enoki": "^0.2.7",
     "@mysten/sui.js": "^0.44.0",
     "@mysten/zklogin": "^0.3.2",
-    "@react-native-async-storage/async-storage": "1.18.2",
-    "@react-native-google-signin/google-signin": "^11.0.1",
+    "@react-native-async-storage/async-storage": "1.18.2",    
     "axios": "^1.5.1",
     "axios-proxy": "^0.0.1-security",
     "base-64": "^1.0.0",

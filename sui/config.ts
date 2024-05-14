@@ -1,4 +1,5 @@
-export const SUI_NETWORK = "https://rpc.testnet.sui.io:443"
+// export const SUI_NETWORK = "https://rpc.testnet.sui.io:443"
+export const SUI_NETWORK = "https://rpc.devnet.sui.io:443"
 export const BACKEND_API = "https://api-testnet.suifrens.sui.io"
 export const PACKAGE_ADDRESS = "0xf8294cd69d69d867c5a187a60e7095711ba237fad6718ea371bf4fbafbc5bb4b"
 export const ADMIN_ADDRESS = "0xe1e150679ba01ffbe19498c9a6885fb6d32191680b691d141a631986176aaee9"

@@ -128,7 +128,7 @@ export async function getZNPFromMystenAPI(jwtToken: string, salt: string, userKe
     //     forceUpdate
     // }
     console.log('zklogin proof post para', url, zkpPayload);
-    const proofResponse = await axios.post(url, zkpPayload)
+    const proofResponse = await axios.post(url, zkpPayload, { headers: { 'Content-Type': 'application/json' } })
 
     if (!proofResponse?.data) {
         Alert.alert("Error getting Zero Knowledge Proof. Please check that Prover Service is running.");

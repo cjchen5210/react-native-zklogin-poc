@@ -33,10 +33,10 @@ import { useSui } from "./sui/hooks/useSui";
 import jwt_decode from "jwt-decode";
 import { generateNonce, generateRandomness, genAddressSeed, getZkLoginSignature, jwtToAddress } from '@mysten/zklogin';
 import * as WebBrowser from 'expo-web-browser';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Google from 'expo-auth-session/providers/google';
 import { Ed25519Keypair } from '@mysten/sui.js/keypairs/ed25519'
-import * as AuthSession from 'expo-auth-session';
+import axios from "axios"
+
 
 const defaultAuthState = {
     hasLoggedInOnce: false,
@@ -60,11 +60,31 @@ const App = () => {
         webClientId: '224270927962-p5fasuku6k9p7i9q8o7phdsf7rm41r38.apps.googleusercontent.com',
     });
 
+    const enokiGetNonce = async () => {
+        const enokiToken = 'enoki_public_3347c0c8170e38d68ac9368d72fd6909';
+        const url = 'https://api.enoki.mystenlabs.com/v1/zklogin/nonce';
+        const ephemeralKeyPair = new Ed25519Keypair();
+        const ephemeralPrivateKeyB64 = ephemeralKeyPair.export().privateKey;
+
+        const ephemeralPublicKey = ephemeralKeyPair.getPublicKey();
+        const ephemeralPublicKeyB64 = ephemeralPublicKey.toBase64();
+        const ephemeralPublicKeySuiB64 = ephemeralPublicKey.toSuiPublicKey();
+
+        const config = {
+            headers: { Authorization: `Bearer ${enokiToken}` },
+            body: {
+                network: 'testnet',
+                ephemeralPublicKey: ephemeralPublicKeyB64
+            }
+        };
+        const res = await axios.post(url, config);
+        console.log(res);
+    }
     const zklogin = async () => {
         const suiConst = await prepareLogin(suiClient);
-        setStoreSuiConst(() => suiConst);        
+        setStoreSuiConst(() => suiConst);
         window.localStorage.setItem('sui const', JSON.stringify(suiConst));
-        console.log('nonce is', suiConst.nonce);        
+        console.log('nonce is', suiConst.nonce);
         const params = new URLSearchParams({
             client_id: '224270927962-p5fasuku6k9p7i9q8o7phdsf7rm41r38.apps.googleusercontent.com',
             redirect_uri: 'http://localhost:19006',
@@ -76,8 +96,23 @@ const App = () => {
         window.location.replace(loginURL);
     }
 
+    const enokiTest = async () => {
+        const url = 'https://api.enoki.mystenlabs.com/v1/app';
+        const enokiToken = 'enoki_public_3347c0c8170e38d68ac9368d72fd6909';
+        // , "zklogin-jwt": jwtEncoded
+        const jwtEncoded = 'eyJhbGciOiJSUzI1NiIsImtpZCI6ImEzYjc2MmY4NzFjZGIzYmFlMDA0NGM2NDk2MjJmYzEzOTZlZGEzZTMiLCJ0eXAiOiJKV1QifQ.eyJpc3MiOiJodHRwczovL2FjY291bnRzLmdvb2dsZS5jb20iLCJhenAiOiIyMjQyNzA5Mjc5NjItcDVmYXN1a3U2azlwN2k5cThvN3BoZHNmN3JtNDFyMzguYXBwcy5nb29nbGV1c2VyY29udGVudC5jb20iLCJhdWQiOiIyMjQyNzA5Mjc5NjItcDVmYXN1a3U2azlwN2k5cThvN3BoZHNmN3JtNDFyMzguYXBwcy5nb29nbGV1c2VyY29udGVudC5jb20iLCJzdWIiOiIxMDQ1NjEyMzgxODI0MTQzODUyNzgiLCJub25jZSI6Im00V2xqXy1jeVNrYjlxWnB4SzZXeW5kb3dBQSIsIm5iZiI6MTcxNTY2OTQxOCwiaWF0IjoxNzE1NjY5NzE4LCJleHAiOjE3MTU2NzMzMTgsImp0aSI6IjI3YzFjOWJjYThkODExMzQwMTRlNWZhYTIxMTRhNmMzM2Q3MDAwNDMifQ.cHt2H53gA0JMLnBr4awcyOUZHm_qcrBY7eDB_vRvZ4fV1HizUHc_CEEsrCdyX1bdbQWCAp_7uhnF9d6LN--qxq67_h-_Cp-lDlFXvX65_3oR58aNRg6mfsFQz-8YGxreinQMrilorH6wrrvUPOvSCMc2RYCbE8_D4a8qR6WwlvLBM6sKXARAqCW_5sQGuVY8hmLTAqUBpYq-Zf3GmNkq3InktI61jSk7YoBSqTxCIuq9vG2VGsJfyaTc7D5YljffYrlodmQJFXUDWVc7Ky-g05-GqH2D_6mv7lyR9Til4LhNHiJqy7XD3OxmSa0vAiHlrhmi5H2D93K5mvY-_vc9-Q&authuser=0&prompt=none';
+        const config = {
+            headers: { Authorization: `Bearer ${enokiToken}` }
+        };
+
+        // console.log("Getting salt:", url, config);
+        const res = await axios.get(url, config);
+        console.log('enoki test', res);
+    }
+
     const getZKP = useCallback(async (jwt) => {
         try {
+            console.log('jwt', jwt);
             const decodeJwt = jwt_decode(jwt);
             console.log('decode', decodeJwt);
             const iToken = decodeJwt.jti;
@@ -86,8 +121,14 @@ const App = () => {
             console.log('address is ', address);
             const suiconst = window.localStorage.getItem('sui const');
             console.log('local storage sui const', JSON.parse(suiconst));
-            const zkp = await getZNPFromMystenAPI(jwt, '0', JSON.parse(suiconst));
-            console.log('zkp', zkp);
+            const userKey = JSON.parse(suiconst);
+            // get salt from enoki
+            // get zkp from enoki
+            // devnet enoki_public_c4f679ba66bd72bcbebcdbbff9e8dac4
+            // testnet enoki_public_3347c0c8170e38d68ac9368d72fd6909
+            const enokiToken = 'enoki_public_c4f679ba66bd72bcbebcdbbff9e8dac4';
+            const res = await getZNPFromEnoki(jwt, userKey, enokiToken, true);
+            console.log(res);
         } catch (error) {
 
         } finally {
